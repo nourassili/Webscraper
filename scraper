@@ -1,0 +1,99 @@
+import requests
+from bs4 import BeautifulSoup
+from time import strftime
+import os
+
+# Constant for NYTimes article content keyword
+CONTENT_KEYWORD = "story-body-text story-content"
+
+def fetch_url_content(url):
+    """
+    Fetches the content of a URL and returns it as a string.
+    """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise HTTPError for bad responses
+        return response.text
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching URL content: {e}")
+        return None
+
+def save_to_file(content, filename):
+    """
+    Saves content to a file.
+    """
+    try:
+        with open(filename, "w") as file:
+            file.write(content)
+        return filename
+    except IOError as e:
+        print(f"Error saving content to file: {e}")
+        return None
+
+def parse_article_content(html_content):
+    """
+    Parses the article content from HTML and returns it as a list of lines and a suggested filename.
+    """
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        title = soup.title.string.strip().replace('/', '-')
+        filename = f"{title}.txt"
+        paragraphs = soup.find_all("p", class_=CONTENT_KEYWORD)
+
+        lines = [p.get_text(strip=True) + " " for p in paragraphs if p.get_text(strip=True)]
+        return lines, filename
+    except Exception as e:
+        print(f"Error parsing article content: {e}")
+        return None, None
+
+def compile_content(lines):
+    """
+    Compiles a list of lines into a single string.
+    """
+    return ''.join(lines)
+
+def retrieve_urls_from_rss(rss_content):
+    """
+    Retrieves article URLs from an RSS feed.
+    """
+    try:
+        soup = BeautifulSoup(rss_content, 'html.parser')
+        urls = [guid.get_text() for guid in soup.find_all('guid')]
+        return urls
+    except Exception as e:
+        print(f"Error retrieving URLs from RSS: {e}")
+        return []
+
+def news_scrape(url):
+    """
+    Scrapes a news article from the given URL and saves it to a file.
+    """
+    html_content = fetch_url_content(url)
+    if not html_content:
+        return
+
+    lines, filename = parse_article_content(html_content)
+    if not lines or not filename:
+        return
+
+    whole_story = compile_content(lines)
+    save_to_file(whole_story, filename)
+
+    # Clean up raw HTML file if it was saved
+    # os.remove(raw_file)
+
+def main():
+    # Test with a single article URL
+    test_url = "http://www.nytimes.com/2016/12/12/world/europe/rex-tillersons-company-exxon-has-billions-at-stake-over-russia-sanctions.html?partner=rss&emc=rss"
+    news_scrape(test_url)
+
+    # Retrieve URLs from an RSS feed and scrape each article
+    rss_url = "http://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
+    rss_content = fetch_url_content(rss_url)
+    if rss_content:
+        article_urls = retrieve_urls_from_rss(rss_content)
+        for url in article_urls:
+            news_scrape(url)
+
+if __name__ == "__main__":
+    main()
